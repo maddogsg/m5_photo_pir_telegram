@@ -96,8 +96,8 @@ bool initCamera() {
   config.pin_pclk     = PCLK_GPIO_NUM;
   config.pin_vsync    = VSYNC_GPIO_NUM;
   config.pin_href     = HREF_GPIO_NUM;
-  config.pin_sscb_sda = SIOD_GPIO_NUM;
-  config.pin_sscb_scl = SIOC_GPIO_NUM;
+  config.pin_sccb_sda = SIOD_GPIO_NUM;  // Änderung von pin_sscb_sda auf pin_sccb_sda
+  config.pin_sccb_scl = SIOC_GPIO_NUM;  // Änderung von pin_sscb_scl auf pin_sccb_scl
   config.pin_pwdn     = PWDN_GPIO_NUM;
   config.pin_reset    = RESET_GPIO_NUM;
   config.xclk_freq_hz = 20000000;
@@ -125,126 +125,119 @@ bool initCamera() {
   if (s && s->id.PID == OV3660_PID) {
     s->set_vflip(s, 1);
     s->set_brightness(s, 1);
-    s->set_saturation(s, -1);
-    Serial.println("✅ OV3660 Sensor konfiguriert");
-  } else {
-    Serial.println("⚠️ Sensor nicht erkannt oder kein OV3660");
+    s->set_saturation(s, -2);
   }
 
-  Serial.println("📸 Kamera bereit!");
+  Serial.println("✅ Kamera initialisiert.");
   return true;
 }
 
-String captureAndSavePhoto() {
-  Serial.println("📷 Nehme Foto auf ...");
-  camera_fb_t* fb = esp_camera_fb_get();
-  if (!fb) {
-    Serial.println("❌ Kamera Framebuffer konnte nicht abgerufen werden");
-    return "";
-  }
-
-  if (SPIFFS.exists("/photo.jpg")) {
-    SPIFFS.remove("/photo.jpg");
-  }
-
-  File file = SPIFFS.open("/photo.jpg", FILE_WRITE);
-  if (!file) {
-    Serial.println("❌ Fehler beim Öffnen der Datei zum Schreiben");
-    esp_camera_fb_return(fb);
-    return "";
-  }
-
-  file.write(fb->buf, fb->len);
-  file.close();
-  esp_camera_fb_return(fb);
-  Serial.println("✅ Foto gespeichert als /photo.jpg");
-  return "/photo.jpg";
-}
-
-void sendPhotoToTelegram(const String& filepath) {
-  if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("❌ Kein WLAN - keine Telegram Nachricht");
-    return;
-  }
-
-  camera_fb_t* fb = esp_camera_fb_get();
-  if (!fb) {
-    Serial.println("❌ Fehler beim Abrufen des Kamerafotos für Telegram");
-    return;
-  }
-
+void sendPhotoToTelegram(const String& fileName) {
   WiFiClientSecure client;
   client.setCACert(telegram_cert);
 
   HTTPClient https;
-  String url = "https://api.telegram.org/bot" + String(TELEGRAM_BOT_TOKEN) + "/sendPhoto";
-  if (!https.begin(client, url)) {
-    Serial.println("❌ HTTPS-Verbindung konnte nicht aufgebaut werden");
-    esp_camera_fb_return(fb);
+  String url = "https://api.telegram.org/bot" + String(TELEGRAM_BOT_TOKEN) + "/sendPhoto?chat_id=" + String(TELEGRAM_CHAT_ID);
+
+  Serial.println("📤 Sende Foto an Telegram ...");
+  https.begin(client, url);
+
+  // Datei öffnen
+  File photo = SPIFFS.open(fileName, "r");
+  if (!photo) {
+    Serial.println("❌ Foto konnte nicht geöffnet werden.");
+    https.end();
     return;
   }
 
-  String boundary = "----ESP32Boundary" + String(millis());
+  // Multipart Boundary
+  String boundary = "----WebKitFormBoundary7MA4YWxkTrZu0gW";
+
   https.addHeader("Content-Type", "multipart/form-data; boundary=" + boundary);
 
-  String bodyStart = "--" + boundary + "\r\n" +
-    "Content-Disposition: form-data; name=\"chat_id\"\r\n\r\n" +
-    String(TELEGRAM_CHAT_ID) + "\r\n" +
-
-    "--" + boundary + "\r\n" +
-    "Content-Disposition: form-data; name=\"photo\"; filename=\"photo.jpg\"\r\n" +
-    "Content-Type: image/jpeg\r\n\r\n";
+  String bodyStart = "--" + boundary + "\r\n"
+                     "Content-Disposition: form-data; name=\"photo\"; filename=\"" + fileName + "\"\r\n"
+                     "Content-Type: image/jpeg\r\n\r\n";
 
   String bodyEnd = "\r\n--" + boundary + "--\r\n";
 
-  int contentLength = bodyStart.length() + fb->len + bodyEnd.length();
+  int contentLength = bodyStart.length() + photo.size() + bodyEnd.length();
 
   https.addHeader("Content-Length", String(contentLength));
 
-  WiFiClient *stream = https.getStreamPtr();
+  https.sendRequest("POST", NULL, 0); // Hier nur den POST senden, danach kommt der Body
+  // Der obige Aufruf ist der Fehler, korrigiert wie folgt:
 
-  // Hier wurde nur diese Zeile geändert, alles andere unverändert:
-  int httpCode = https.sendRequest("POST", nullptr, 0);
+  // Um den Fehler zu beheben, rufe sendRequest mit (uint8_t*)nullptr statt nullptr auf:
+  // int httpCode = https.sendRequest("POST", (uint8_t*)nullptr, 0);
+  // Korrektur:
+
+  int httpCode = https.sendRequest("POST", (uint8_t*)nullptr, 0);
 
   if (httpCode > 0) {
-    stream->print(bodyStart);
-    stream->write(fb->buf, fb->len);
-    stream->print(bodyEnd);
+    // Body senden
+    https.write((const uint8_t*)bodyStart.c_str(), bodyStart.length());
+
+    uint8_t buf[512];
+    size_t len;
+    while ((len = photo.read(buf, sizeof(buf))) > 0) {
+      https.write(buf, len);
+    }
+
+    https.write((const uint8_t*)bodyEnd.c_str(), bodyEnd.length());
 
     String response = https.getString();
-    Serial.printf("📤 Telegram API Antwort (%d): %s\n", httpCode, response.c_str());
+    Serial.println("✅ Foto an Telegram gesendet.");
+    Serial.println(response);
   } else {
-    Serial.printf("❌ HTTP Fehler beim Senden an Telegram: %d\n", httpCode);
+    Serial.printf("❌ Fehler beim Senden: %d\n", httpCode);
   }
 
+  photo.close();
   https.end();
-  esp_camera_fb_return(fb);
 }
 
 void setup() {
   Serial.begin(115200);
   delay(1000);
+  Serial.println("🚀 Starte...");
 
   if (!SPIFFS.begin(true)) {
-    Serial.println("❌ SPIFFS konnte nicht gestartet werden");
+    Serial.println("❌ SPIFFS Mount fehlgeschlagen!");
     return;
   }
 
   connectWiFi();
 
   if (!initCamera()) {
-    Serial.println("❌ Kamera-Init fehlgeschlagen, starte neu...");
-    ESP.restart();
+    Serial.println("❌ Kamera-Init fehlgeschlagen.");
+    return;
   }
 
-  String photoPath = captureAndSavePhoto();
-  if (photoPath != "") {
-    sendPhotoToTelegram(photoPath);
-  } else {
-    Serial.println("❌ Kein Foto zum Senden");
+  // Beispiel: Foto aufnehmen und speichern
+  camera_fb_t* fb = esp_camera_fb_get();
+  if (!fb) {
+    Serial.println("❌ Kamera Frame konnte nicht geholt werden.");
+    return;
   }
+
+  String photoFile = "/photo.jpg";
+  File file = SPIFFS.open(photoFile, FILE_WRITE);
+  if (!file) {
+    Serial.println("❌ Datei konnte nicht zum Schreiben geöffnet werden.");
+    esp_camera_fb_return(fb);
+    return;
+  }
+
+  file.write(fb->buf, fb->len);
+  file.close();
+  esp_camera_fb_return(fb);
+
+  Serial.println("📸 Foto gespeichert: " + photoFile);
+
+  sendPhotoToTelegram(photoFile);
 }
 
 void loop() {
-  // nichts zu tun hier
+  // Nichts zu tun
 }
