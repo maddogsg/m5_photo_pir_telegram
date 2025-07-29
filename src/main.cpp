@@ -221,7 +221,7 @@ void sendPhotoToTelegram(const String& fileName) {
   }
 
   Serial.println("✅ Foto an Telegram gesendet:");
-  Serial.println(response);
+  // Serial.println(response);
 }
 
 void setup() {
