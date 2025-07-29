@@ -7,42 +7,7 @@
 #include "esp_camera.h"
 #include "secrets.h"
 
-// ✅ Telegram Root-Zertifikat (ISRG Root X1 – Let's Encrypt)
-const char TELEGRAM_ROOT_CERT[] PROGMEM = R"EOF(
------BEGIN CERTIFICATE-----
-MIIFazCCA1OgAwIBAgISA6vbbA5Mf3a3IY03X+fMpVdNMA0GCSqGSIb3DQEBCwUA
-MEoxCzAJBgNVBAYTAlVTMRMwEQYDVQQKEwpMZXQncyBFbmNyeXB0MR8wHQYDVQQD
-ExZJc1JHIFJvb3QgWDEgUjMgQ2VydGlmaWNhdGUwHhcNMjMwNzE4MDAwMDAwWhcN
-MzMwNzE4MDAwMDAwWjBKMQswCQYDVQQGEwJVUzETMBEGA1UEChMKTGV0J3MgRW5j
-cnlwdDEfMB0GA1UEAxMWSXNSRyBSb290IFgxIFIzIENlcnRpZmljYXRlMIICIjAN
-BgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEAz8eGgrz/j1Ez+8sGdWdGBgTXuj16
-qk7Fbl+XbPCx7nCJcLRT/PRH+QX+yX93AXt+iG3T7JZTWgy3Cnx5iUuPfW9RHn92
-HZPYD+QJ2p6a0TCb6NSZuQwKtG7nk6EoTGyjYcJ5k3W1VVGOBNP1OQ0iEYJ1p79G
-bfpSKsmEIsZUsD1BJ0QL7Kk6OG3PtUxAIu6K0C3W7Wf7AfEBbsfYAXnyWyZX1FXG
-Yo9Na4PEI9KzPN6XGl6HfZKRklgVqQ0L6Gbv5xQxO2jRp/TbnlK/xzU1Y3P0aQOz
-R5mVAYXoyocGuAklCgjyN8gYZnmwe4Ibl1eknUgjcOC8CnLSc9RmI54j9C0PUIxv
-GzqC6PvRBl7WRItjqEb7eEVjDYIWdgh5AGK/8JqFgKMRn9RGSR+82ytggqR21EtE
-MWDCE9qIKIGbI50+qV1p6FrRk7DwLKmlpFF1aNEO8GndLZX4VovIQcI3FKFj6PDa
-6QsAjq9dmb0SE/1YF9P7Sv62xTt2fx82rzZTlNjB2fYO/gBQ1GCNvMTCOyLVH+Iu
-dcCxDXL+yMJfQz6mhtUOYxxbgPGuhCHG5gyHmqB80L7bkoVW3QOY7+VoZfhX9BLN
-W6RjzJz2A1Y4PZ3VY8gO0yrj+91W9Yg5WvY74BzByaUl9KHbUk38spzZApI7RNUf
-OQIDAQABo0IwQDAOBgNVHQ8BAf8EBAMCAqQwDwYDVR0TAQH/BAUwAwEB/zAdBgNV
-HQ4EFgQUA8Pn7GhWgF/YVQylvjX6tI4HZfMwDQYJKoZIhvcNAQELBQADggIBAADs
-m5KuvzPVU9zv93NNe3iDZmNgTt51PXMSACcH6RtY1M7vstKDKZ3w8Bg42z03pNC9
-R9Be6eYf2ebTYHUWZncfZWxUoCWt8zLJyxXcoZLQEMjCNcZb+M2pYxrl0f35eEBY
-7SEt/Vopv8b+n/AVMMNlqRQqgPbKkCKrpKoS5XQ0+y44SCe9ZP+l/FNKrbBFUOyo
-NLU6F6IJKJjG4K5zytCsdF3VCDMgE3REWm3e2HjvXG/B+VrLCTcRAaUpmJ9UZGEU
-D8ebU4FjTqt4szf2q3rLn2pI0qJDGn70HQmfqjL4s6KTyA03FZ1kZP6rDiy79zzF
-yGmGm8+2u1v8nDZrpK//OWVml2g+Db9tErTG34+5ZlFc4QCeL9K0sMFE68V/E0s6
-o6cQnm4/8X1BCs1sd5qNOrqGGsH2cf0ovJuZReD4+zCVnOGanDqQGzS6+EdumzFu
-5OrF0jO53Yvs5FaZKBP3x3thU5w+xJ86kE1K5fnUEBaQ/B4phRQ7ty/AS0AfUWR4
-ytQ0vFSWy5S/0S/98XX0aA1SYXpHkqhzBSenqdr4pbU6h9Kn6LBeHgmFLGmFZ5Jf
-S9TVyf1A3CDpEtPC5oO2r+yIuG4AKI8Tf1cQbNdtgkyYpy38RbCK12Rh4lhPL96O
-Ba4GO2UIehXTdcPpJMHx+UD25qRVIlQfB0RB
------END CERTIFICATE-----
-)EOF";
-
-// ✅ PIN-Konfiguration für M5Stack TimerCAM X
+// ✅ PIN-Konfiguration für M5Stack TimerCAM X (mit OV3660)
 #define PWDN_GPIO_NUM    -1
 #define RESET_GPIO_NUM   15
 #define XCLK_GPIO_NUM    27
@@ -60,14 +25,50 @@ Ba4GO2UIehXTdcPpJMHx+UD25qRVIlQfB0RB
 #define HREF_GPIO_NUM    26
 #define PCLK_GPIO_NUM    21
 
+// Telegram CA Root Zertifikat (PEM Format)
+const char* telegram_cert = \
+"-----BEGIN CERTIFICATE-----\n"
+"MIIFFjCCAv6gAwIBAgIRAJErCErPDBinU/bWLiWnX1owDQYJKoZIhvcNAQELBQAw\n"
+"TzELMAkGA1UEBhMCVVMxKTAnBgNVBAoTIEludGVybmV0IFNlY3VyaXR5IFJlc2Vh\n"
+"cmNoIEdyb3VwMRUwEwYDVQQDEwxJU1JHIFJvb3QgWDEwHhcNMjAwOTA0MDAwMDAw\n"
+"WhcNMjUwOTE1MTYwMDAwWjAyMQswCQYDVQQGEwJVUzEWMBQGA1UEChMNTGV0J3Mg\n"
+"RW5jcnlwdDELMAkGA1UEAxMCUjMwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEK\n"
+"AoIBAQC7AhUozPaglNMPEuyNVZLD+ILxmaZ6QoinXSaqtSu5xUyxr45r+XXIo9cP\n"
+"R5QUVTVXjJ6oojkZ9YI8QqlObvU7wy7bjcCwXPNZOOftz2nwWgsbvsCUJCWH+jdx\n"
+"sxPnHKzhm+/b5DtFUkWWqcFTzjTIUu61ru2P3mBw4qVUq7ZtDpelQDRrK9O8Zutm\n"
+"NHz6a4uPVymZ+DAXXbpyb/uBxa3Shlg9F8fnCbvxK/eG3MHacV3URuPMrSXBiLxg\n"
+"Z3Vms/EY96Jc5lP/Ooi2R6X/ExjqmAl3P51T+c8B5fWmcBcUr2Ok/5mzk53cU6cG\n"
+"/kiFHaFpriV1uxPMUgP17VGhi9sVAgMBAAGjggEIMIIBBDAOBgNVHQ8BAf8EBAMC\n"
+"AYYwHQYDVR0lBBYwFAYIKwYBBQUHAwIGCCsGAQUFBwMBMBIGA1UdEwEB/wQIMAYB\n"
+"Af8CAQAwHQYDVR0OBBYEFBQusxe3WFbLrlAJQOYfr52LFMLGMB8GA1UdIwQYMBaA\n"
+"FHm0WeZ7tuXkAXOACIjIGlj26ZtuMDIGCCsGAQUFBwEBBCYwJDAiBggrBgEFBQcw\n"
+"AoYWaHR0cDovL3gxLmkubGVuY3Iub3JnLzAnBgNVHR8EIDAeMBygGqAYhhZodHRw\n"
+"Oi8veDEuYy5sZW5jci5vcmcvMCIGA1UdIAQbMBkwCAYGZ4EMAQIBMA0GCysGAQQB\n"
+"gt8TAQEBMA0GCSqGSIb3DQEBCwUAA4ICAQCFyk5HPqP3hUSFvNVneLKYY611TR6W\n"
+"PTNlclQtgaDqw+34IL9fzLdwALduO/ZelN7kIJ+m74uyA+eitRY8kc607TkC53wl\n"
+"ikfmZW4/RvTZ8M6UK+5UzhK8jCdLuMGYL6KvzXGRSgi3yLgjewQtCPkIVz6D2QQz\n"
+"CkcheAmCJ8MqyJu5zlzyZMjAvnnAT45tRAxekrsu94sQ4egdRCnbWSDtY7kh+BIm\n"
+"lJNXoB1lBMEKIq4QDUOXoRgffuDghje1WrG9ML+Hbisq/yFOGwXD9RiX8F6sw6W4\n"
+"avAuvDszue5L3sz85K+EC4Y/wFVDNvZo4TYXao6Z0f+lQKc0t8DQYzk1OXVu8rp2\n"
+"yJMC6alLbBfODALZvYH7n7do1AZls4I9d1P4jnkDrQoxB3UqQ9hVl3LEKQ73xF1O\n"
+"yK5GhDDX8oVfGKF5u+decIsH4YaTw7mP3GFxJSqv3+0lUFJoi5Lc5da149p90Ids\n"
+"hCExroL1+7mryIkXPeFM5TgO9r0rvZaBFOvV2z0gp35Z0+L4WPlbuEjN/lxPFin+\n"
+"HlUjr8gRsI3qfJOQFy/9rKIJR0Y/8Omwt/8oTWgy1mdeHmmjk7j1nYsvC9JSQ6Zv\n"
+"MldlTTKB3zhThV1+XWYp6rjd5JW1zbVWEkLNxE7GJThEUG3szgBVGP7pSWTUTsqX\n"
+"nLRbwHOoq7hHwg==\n"
+"-----END CERTIFICATE-----\n";
+
 void connectWiFi() {
   Serial.print("🔌 Verbinde mit WLAN: ");
   Serial.println(WIFI_SSID);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-  for (int i = 0; i < 20 && WiFi.status() != WL_CONNECTED; i++) {
+  int retries = 0;
+  while (WiFi.status() != WL_CONNECTED && retries < 20) {
     delay(500);
     Serial.print(".");
+    retries++;
   }
+
   if (WiFi.status() == WL_CONNECTED) {
     Serial.println("\n✅ WLAN verbunden!");
     Serial.print("📡 IP-Adresse: ");
@@ -80,37 +81,43 @@ void connectWiFi() {
 bool initCamera() {
   Serial.println("📷 Initialisiere Kamera ...");
 
-  camera_config_t config = {
-    .ledc_channel = LEDC_CHANNEL_0,
-    .ledc_timer = LEDC_TIMER_0,
-    .pin_d0 = Y2_GPIO_NUM,
-    .pin_d1 = Y3_GPIO_NUM,
-    .pin_d2 = Y4_GPIO_NUM,
-    .pin_d3 = Y5_GPIO_NUM,
-    .pin_d4 = Y6_GPIO_NUM,
-    .pin_d5 = Y7_GPIO_NUM,
-    .pin_d6 = Y8_GPIO_NUM,
-    .pin_d7 = Y9_GPIO_NUM,
-    .pin_xclk = XCLK_GPIO_NUM,
-    .pin_pclk = PCLK_GPIO_NUM,
-    .pin_vsync = VSYNC_GPIO_NUM,
-    .pin_href = HREF_GPIO_NUM,
-    .pin_sscb_sda = SIOD_GPIO_NUM,
-    .pin_sscb_scl = SIOC_GPIO_NUM,
-    .pin_pwdn = PWDN_GPIO_NUM,
-    .pin_reset = RESET_GPIO_NUM,
-    .xclk_freq_hz = 20000000,
-    .pixel_format = PIXFORMAT_JPEG,
-    .frame_size = psramFound() ? FRAMESIZE_SVGA : FRAMESIZE_QVGA,
-    .jpeg_quality = psramFound() ? 10 : 12,
-    .fb_count = psramFound() ? 2 : 1
-  };
+  camera_config_t config;
+  config.ledc_timer   = LEDC_TIMER_0;
+  config.ledc_channel = LEDC_CHANNEL_0;
+  config.pin_d0       = Y2_GPIO_NUM;
+  config.pin_d1       = Y3_GPIO_NUM;
+  config.pin_d2       = Y4_GPIO_NUM;
+  config.pin_d3       = Y5_GPIO_NUM;
+  config.pin_d4       = Y6_GPIO_NUM;
+  config.pin_d5       = Y7_GPIO_NUM;
+  config.pin_d6       = Y8_GPIO_NUM;
+  config.pin_d7       = Y9_GPIO_NUM;
+  config.pin_xclk     = XCLK_GPIO_NUM;
+  config.pin_pclk     = PCLK_GPIO_NUM;
+  config.pin_vsync    = VSYNC_GPIO_NUM;
+  config.pin_href     = HREF_GPIO_NUM;
+  config.pin_sscb_sda = SIOD_GPIO_NUM;
+  config.pin_sscb_scl = SIOC_GPIO_NUM;
+  config.pin_pwdn     = PWDN_GPIO_NUM;
+  config.pin_reset    = RESET_GPIO_NUM;
+  config.xclk_freq_hz = 20000000;
+  config.pixel_format = PIXFORMAT_JPEG;
 
-  Serial.println(psramFound() ? "💾 PSRAM gefunden: SVGA, Qualität 10, 2 FB" :
-                                "⚠️ Kein PSRAM: QVGA, Qualität 12, 1 FB");
+  if (psramFound()) {
+    config.frame_size = FRAMESIZE_SVGA;
+    config.jpeg_quality = 10;
+    config.fb_count = 2;
+    Serial.println("💾 PSRAM gefunden: SVGA, Qualität 10, 2 Framebuffer");
+  } else {
+    config.frame_size = FRAMESIZE_QVGA;
+    config.jpeg_quality = 12;
+    config.fb_count = 1;
+    Serial.println("⚠️ Kein PSRAM: QVGA, Qualität 12, 1 Framebuffer");
+  }
 
-  if (esp_camera_init(&config) != ESP_OK) {
-    Serial.println("❌ Kamera-Init fehlgeschlagen!");
+  esp_err_t err = esp_camera_init(&config);
+  if (err != ESP_OK) {
+    Serial.printf("❌ Kamera-Init fehlgeschlagen (0x%x)\n", err);
     return false;
   }
 
@@ -120,6 +127,8 @@ bool initCamera() {
     s->set_brightness(s, 1);
     s->set_saturation(s, -1);
     Serial.println("✅ OV3660 Sensor konfiguriert");
+  } else {
+    Serial.println("⚠️ Sensor nicht erkannt oder kein OV3660");
   }
 
   Serial.println("📸 Kamera bereit!");
@@ -130,99 +139,124 @@ String captureAndSavePhoto() {
   Serial.println("📷 Nehme Foto auf ...");
   camera_fb_t* fb = esp_camera_fb_get();
   if (!fb) {
-    Serial.println("❌ Kameraaufnahme fehlgeschlagen!");
+    Serial.println("❌ Kamera Framebuffer konnte nicht abgerufen werden");
     return "";
   }
 
-  if (!SPIFFS.begin(true)) {
-    Serial.println("❌ SPIFFS Fehler beim Mounten");
-    esp_camera_fb_return(fb);
-    return "";
+  if (SPIFFS.exists("/photo.jpg")) {
+    SPIFFS.remove("/photo.jpg");
   }
 
   File file = SPIFFS.open("/photo.jpg", FILE_WRITE);
   if (!file) {
-    Serial.println("❌ Datei konnte nicht geöffnet werden");
+    Serial.println("❌ Fehler beim Öffnen der Datei zum Schreiben");
     esp_camera_fb_return(fb);
     return "";
   }
 
   file.write(fb->buf, fb->len);
   file.close();
-  Serial.println("✅ Foto gespeichert: /photo.jpg");
   esp_camera_fb_return(fb);
+  Serial.println("✅ Foto gespeichert als /photo.jpg");
   return "/photo.jpg";
 }
 
-bool sendPhotoToTelegram(const String& path) {
-  Serial.println("🚀 Sende Foto an Telegram ...");
-
-  File photo = SPIFFS.open(path, "r");
-  if (!photo || photo.size() == 0) {
-    Serial.println("❌ Foto konnte nicht gelesen werden");
-    return false;
+void sendPhotoToTelegram(const String& filepath) {
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("❌ Kein WLAN - keine Telegram Nachricht");
+    return;
   }
 
-  size_t size = photo.size();
-  Serial.printf("📦 Fotogröße: %d Bytes\n", size);
-
-  uint8_t* buffer = new uint8_t[size];
-  photo.readBytes((char*)buffer, size);
-  photo.close();
-
   WiFiClientSecure client;
-  client.setCACert(TELEGRAM_ROOT_CERT);
+  client.setCACert(telegram_cert);
 
-  HTTPClient http;
-  String url = "https://api.telegram.org/bot" + String(TELEGRAM_BOT_TOKEN) + "/sendPhoto";
-  http.begin(client, url);
-  http.addHeader("Content-Type", "multipart/form-data; boundary=----WebKitFormBoundary");
+  HTTPClient https;
 
-  String start =
-    "------WebKitFormBoundary\r\n"
-    "Content-Disposition: form-data; name=\"chat_id\"\r\n\r\n" + String(TELEGRAM_CHAT_ID) + "\r\n" +
-    "------WebKitFormBoundary\r\n"
+  Serial.println("✉️ Sende Foto an Telegram ...");
+
+  if (!https.begin(client, "https://api.telegram.org/bot" + String(TELEGRAM_BOT_TOKEN) + "/sendPhoto")) {
+    Serial.println("❌ HTTPS Begin fehlgeschlagen");
+    return;
+  }
+
+  https.addHeader("Content-Type", "multipart/form-data; boundary=----ESP32FormBoundary");
+
+  String bodyStart = 
+    "------ESP32FormBoundary\r\n"
+    "Content-Disposition: form-data; name=\"chat_id\"\r\n\r\n" +
+    String(TELEGRAM_CHAT_ID) + "\r\n" +
+
+    "------ESP32FormBoundary\r\n"
     "Content-Disposition: form-data; name=\"photo\"; filename=\"photo.jpg\"\r\n"
     "Content-Type: image/jpeg\r\n\r\n";
 
-  String end = "\r\n------WebKitFormBoundary--\r\n";
+  String bodyEnd = "\r\n------ESP32FormBoundary--\r\n";
 
-  int totalLen = start.length() + size + end.length();
-  http.sendRequest("POST", (uint8_t*)0, totalLen);
-
-  WiFiClient* stream = http.getStreamPtr();
-  stream->print(start);
-  stream->write(buffer, size);
-  stream->print(end);
-
-  int code = http.GET();
-  delete[] buffer;
-
-  if (code == 200) {
-    Serial.println("✅ Telegram-Upload erfolgreich!");
-    SPIFFS.remove(path);
-    return true;
-  } else {
-    Serial.printf("❌ Telegram-Upload fehlgeschlagen (Code %d)\n", code);
-    return false;
+  File photoFile = SPIFFS.open(filepath, FILE_READ);
+  if (!photoFile) {
+    Serial.println("❌ Fehler beim Öffnen der Fotodatei für Upload");
+    https.end();
+    return;
   }
+
+  int photoSize = photoFile.size();
+
+  // Setze Content-Length (optional, kann HTTPClient auch selbst machen)
+  https.addHeader("Content-Length", String(bodyStart.length() + photoSize + bodyEnd.length()));
+
+  // Beginne POST
+  int httpCode = https.sendRequest("POST", nullptr, 0, false);
+
+  if (httpCode > 0) {
+    // Write bodyStart
+    client.print(bodyStart);
+
+    // Schreibe Foto-Daten
+    uint8_t buf[512];
+    while (photoFile.available()) {
+      size_t len = photoFile.read(buf, sizeof(buf));
+      client.write(buf, len);
+    }
+    photoFile.close();
+
+    // Schreibe bodyEnd
+    client.print(bodyEnd);
+
+    // Warte auf Antwort
+    String response = https.getString();
+
+    Serial.printf("📨 Telegram API Antwort (%d): %s\n", httpCode, response.c_str());
+  } else {
+    Serial.printf("❌ HTTP Fehler beim Senden an Telegram: %d\n", httpCode);
+  }
+
+  https.end();
 }
 
 void setup() {
   Serial.begin(115200);
-  delay(500);
+  delay(1000);
+
+  if (!SPIFFS.begin(true)) {
+    Serial.println("❌ SPIFFS konnte nicht gestartet werden");
+    return;
+  }
+
   connectWiFi();
+
   if (!initCamera()) {
-    Serial.println("❌ Abbruch – Kamera nicht bereit");
-    while (true) delay(1000);
+    Serial.println("❌ Kamera-Init fehlgeschlagen, starte neu...");
+    ESP.restart();
+  }
+
+  String photoPath = captureAndSavePhoto();
+  if (photoPath != "") {
+    sendPhotoToTelegram(photoPath);
+  } else {
+    Serial.println("❌ Kein Foto zum Senden");
   }
 }
 
 void loop() {
-  Serial.println("\n🔁 Starte neuen Erkennungsdurchlauf ...");
-  String photoPath = captureAndSavePhoto();
-  if (photoPath.length() > 0) {
-    sendPhotoToTelegram(photoPath);
-  }
-  delay(60000); // ⏱️ 1 Minute warten
+  // nichts zu tun hier
 }
