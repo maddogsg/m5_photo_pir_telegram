@@ -174,23 +174,24 @@ void sendPhotoToTelegram(const String& filepath) {
 
   Serial.println("✉️ Sende Foto an Telegram ...");
 
-  if (!https.begin(client, "https://api.telegram.org/bot" + String(TELEGRAM_BOT_TOKEN) + "/sendPhoto")) {
+  String url = "https://api.telegram.org/bot" + String(TELEGRAM_BOT_TOKEN) + "/sendPhoto";
+  if (!https.begin(client, url)) {
     Serial.println("❌ HTTPS Begin fehlgeschlagen");
     return;
   }
 
-  https.addHeader("Content-Type", "multipart/form-data; boundary=----ESP32FormBoundary");
+  String boundary = "----ESP32FormBoundary";
 
-  String bodyStart = 
-    "------ESP32FormBoundary\r\n"
+  String bodyStart =
+    "--" + boundary + "\r\n" +
     "Content-Disposition: form-data; name=\"chat_id\"\r\n\r\n" +
     String(TELEGRAM_CHAT_ID) + "\r\n" +
 
-    "------ESP32FormBoundary\r\n"
-    "Content-Disposition: form-data; name=\"photo\"; filename=\"photo.jpg\"\r\n"
+    "--" + boundary + "\r\n" +
+    "Content-Disposition: form-data; name=\"photo\"; filename=\"photo.jpg\"\r\n" +
     "Content-Type: image/jpeg\r\n\r\n";
 
-  String bodyEnd = "\r\n------ESP32FormBoundary--\r\n";
+  String bodyEnd = "\r\n--" + boundary + "--\r\n";
 
   File photoFile = SPIFFS.open(filepath, FILE_READ);
   if (!photoFile) {
@@ -199,19 +200,18 @@ void sendPhotoToTelegram(const String& filepath) {
     return;
   }
 
-  int photoSize = photoFile.size();
+  size_t photoSize = photoFile.size();
 
-  // Setze Content-Length (optional, kann HTTPClient auch selbst machen)
-  https.addHeader("Content-Length", String(bodyStart.length() + photoSize + bodyEnd.length()));
+  int contentLength = bodyStart.length() + photoSize + bodyEnd.length();
 
-  // Beginne POST
-  int httpCode = https.sendRequest("POST", nullptr, 0, false);
+  https.addHeader("Content-Type", "multipart/form-data; boundary=" + boundary);
+  https.addHeader("Content-Length", String(contentLength));
 
-  if (httpCode > 0) {
-    // Write bodyStart
+  int httpCode = https.sendRequest("POST", nullptr, contentLength);
+
+  if (httpCode == HTTP_CODE_OK || httpCode == HTTP_CODE_ACCEPTED) {
     client.print(bodyStart);
 
-    // Schreibe Foto-Daten
     uint8_t buf[512];
     while (photoFile.available()) {
       size_t len = photoFile.read(buf, sizeof(buf));
@@ -219,15 +219,13 @@ void sendPhotoToTelegram(const String& filepath) {
     }
     photoFile.close();
 
-    // Schreibe bodyEnd
     client.print(bodyEnd);
 
-    // Warte auf Antwort
     String response = https.getString();
-
     Serial.printf("📨 Telegram API Antwort (%d): %s\n", httpCode, response.c_str());
   } else {
     Serial.printf("❌ HTTP Fehler beim Senden an Telegram: %d\n", httpCode);
+    photoFile.close();
   }
 
   https.end();
