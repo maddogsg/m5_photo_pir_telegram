@@ -163,6 +163,7 @@ bool detectMotion() {
   }
 
   esp_camera_fb_return(fb);
+  delay(100); 
   return motionDetected;
 }
 
@@ -249,6 +250,7 @@ void loop() {
     Serial.println("⚠️ Bewegung erkannt!");
 
     esp_camera_deinit();
+    delay(200); 
     if (!initCamera(PIXFORMAT_JPEG)) {
       Serial.println("❌ Kamera Init (JPEG) fehlgeschlagen.");
       return;
@@ -265,17 +267,20 @@ void loop() {
     if (!file) {
       Serial.println("❌ Datei konnte nicht geöffnet werden.");
       esp_camera_fb_return(fb);
+      delay(100); 
       return;
     }
 
     file.write(fb->buf, fb->len);
     file.close();
     esp_camera_fb_return(fb);
+    delay(100); 
 
     Serial.println("📸 Foto gespeichert: " + photoFile);
     sendPhotoToTelegram(photoFile);
 
     esp_camera_deinit();
+    delay(200);
     initCamera(PIXFORMAT_GRAYSCALE);  // zurück zu Bewegungsmodus
   } else {
     Serial.println("✅ Keine Bewegung.");
