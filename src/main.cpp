@@ -109,7 +109,7 @@ bool initCamera(pixformat_t format) {
     config.frame_size = FRAMESIZE_VGA;
     config.jpeg_quality = 10;
     config.fb_count = 2;
-    Serial.println("💾 PSRAM gefunden: SVGA, Qualität 10, 2 Framebuffer");
+    Serial.println("💾 PSRAM gefunden: VGA, Qualität 10, 2 Framebuffer");
   } else {
     config.frame_size = FRAMESIZE_QVGA;
     config.jpeg_quality = 12;
