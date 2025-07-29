@@ -167,23 +167,27 @@ void sendPhotoToTelegram(const String& filepath) {
     return;
   }
 
+  camera_fb_t* fb = esp_camera_fb_get();
+  if (!fb) {
+    Serial.println("❌ Fehler beim Abrufen des Kamerafotos für Telegram");
+    return;
+  }
+
   WiFiClientSecure client;
   client.setCACert(telegram_cert);
 
   HTTPClient https;
-
-  Serial.println("✉️ Sende Foto an Telegram ...");
-
   String url = "https://api.telegram.org/bot" + String(TELEGRAM_BOT_TOKEN) + "/sendPhoto";
   if (!https.begin(client, url)) {
-    Serial.println("❌ HTTPS Begin fehlgeschlagen");
+    Serial.println("❌ HTTPS-Verbindung konnte nicht aufgebaut werden");
+    esp_camera_fb_return(fb);
     return;
   }
 
-  String boundary = "----ESP32FormBoundary";
+  String boundary = "----ESP32Boundary" + String(millis());
+  https.addHeader("Content-Type", "multipart/form-data; boundary=" + boundary);
 
-  String bodyStart =
-    "--" + boundary + "\r\n" +
+  String bodyStart = "--" + boundary + "\r\n" +
     "Content-Disposition: form-data; name=\"chat_id\"\r\n\r\n" +
     String(TELEGRAM_CHAT_ID) + "\r\n" +
 
@@ -193,42 +197,26 @@ void sendPhotoToTelegram(const String& filepath) {
 
   String bodyEnd = "\r\n--" + boundary + "--\r\n";
 
-  File photoFile = SPIFFS.open(filepath, FILE_READ);
-  if (!photoFile) {
-    Serial.println("❌ Fehler beim Öffnen der Fotodatei für Upload");
-    https.end();
-    return;
-  }
+  int contentLength = bodyStart.length() + fb->len + bodyEnd.length();
 
-  size_t photoSize = photoFile.size();
-
-  int contentLength = bodyStart.length() + photoSize + bodyEnd.length();
-
-  https.addHeader("Content-Type", "multipart/form-data; boundary=" + boundary);
   https.addHeader("Content-Length", String(contentLength));
 
-  int httpCode = https.sendRequest("POST", nullptr, contentLength);
+  WiFiClient *stream = https.getStreamPtr();
 
-  if (httpCode == HTTP_CODE_OK || httpCode == HTTP_CODE_ACCEPTED) {
-    client.print(bodyStart);
-
-    uint8_t buf[512];
-    while (photoFile.available()) {
-      size_t len = photoFile.read(buf, sizeof(buf));
-      client.write(buf, len);
-    }
-    photoFile.close();
-
-    client.print(bodyEnd);
+  int httpCode = https.sendRequest("POST", nullptr, 0);
+  if (httpCode > 0) {
+    stream->print(bodyStart);
+    stream->write(fb->buf, fb->len);
+    stream->print(bodyEnd);
 
     String response = https.getString();
-    Serial.printf("📨 Telegram API Antwort (%d): %s\n", httpCode, response.c_str());
+    Serial.printf("📤 Telegram API Antwort (%d): %s\n", httpCode, response.c_str());
   } else {
     Serial.printf("❌ HTTP Fehler beim Senden an Telegram: %d\n", httpCode);
-    photoFile.close();
   }
 
   https.end();
+  esp_camera_fb_return(fb);
 }
 
 void setup() {
