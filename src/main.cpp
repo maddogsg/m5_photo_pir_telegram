@@ -60,45 +60,29 @@ const char* telegram_cert = \
 uint8_t* lastFrameBuf = nullptr;
 size_t lastFrameLen = 0;
 
-unsigned long startTime = 0; // neu: Startzeit merken
-
-// Hilfsfunktion Tageszeit-String [HH:MM:SS]
-String getTimeStamp() {
-  time_t now = time(nullptr);
-  struct tm timeinfo;
-  localtime_r(&now, &timeinfo);
-  char buf[16];
-  snprintf(buf, sizeof(buf), "[%02d:%02d:%02d] ", timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
-  return String(buf);
-}
+unsigned long startTime = 0; // Startzeit merken
 
 void connectWiFi() {
-  Serial.print(getTimeStamp());
   Serial.print("🔌 Verbinde mit WLAN: ");
   Serial.println(WIFI_SSID);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   int retries = 0;
   while (WiFi.status() != WL_CONNECTED && retries < 20) {
     delay(500);
-    Serial.print(getTimeStamp());
     Serial.print(".");
     retries++;
   }
 
   if (WiFi.status() == WL_CONNECTED) {
-    Serial.print(getTimeStamp());
-    Serial.println("✅ WLAN verbunden!");
-    Serial.print(getTimeStamp());
+    Serial.println("\n✅ WLAN verbunden!");
     Serial.print("📡 IP-Adresse: ");
     Serial.println(WiFi.localIP());
   } else {
-    Serial.print(getTimeStamp());
-    Serial.println("❌ WLAN-Verbindung fehlgeschlagen!");
+    Serial.println("\n❌ WLAN-Verbindung fehlgeschlagen!");
   }
 }
 
 bool initCamera(pixformat_t format) {
-  Serial.print(getTimeStamp());
   Serial.println("📷 Initialisiere Kamera ...");
 
   camera_config_t config;
@@ -127,47 +111,40 @@ bool initCamera(pixformat_t format) {
     config.frame_size = FRAMESIZE_VGA;
     config.jpeg_quality = 10;
     config.fb_count = 2;
-    Serial.print(getTimeStamp());
     Serial.println("💾 PSRAM gefunden: VGA, Qualität 10, 2 Framebuffer");
   } else {
     config.frame_size = FRAMESIZE_QVGA;
     config.jpeg_quality = 12;
     config.fb_count = 1;
-    Serial.print(getTimeStamp());
     Serial.println("⚠️ Kein PSRAM: QVGA, Qualität 12, 1 Framebuffer");
   }
 
   esp_err_t err = esp_camera_init(&config);
   if (err != ESP_OK) {
-    Serial.print(getTimeStamp());
     Serial.printf("❌ Kamera-Init fehlgeschlagen (0x%x)\n", err);
     return false;
   }
 
   sensor_t* s = esp_camera_sensor_get();
   if (s && s->id.PID == OV3660_PID) {
-    s->set_vflip(s, 1);
-    s->set_brightness(s, 1);
-    s->set_saturation(s, -2);
+    s->set_vflip(s, 1); // OV3660 Sensor: Bild drehen
   }
 
-  Serial.print(getTimeStamp());
-  Serial.println("✅ Kamera initialisiert.");
+  Serial.println("✅ Kamera initialisiert");
   return true;
 }
 
 bool detectMotion() {
   camera_fb_t* fb = esp_camera_fb_get();
   if (!fb || !fb->buf) {
-    Serial.print(getTimeStamp());
-    Serial.println("❌ Kein Frame für Bewegungserkennung.");
+    Serial.println("⚠️ Kein Bild verfügbar");
     return false;
   }
 
   bool motionDetected = false;
 
   if (lastFrameBuf && lastFrameLen == fb->len) {
-    size_t diffSum = 0;
+    unsigned long diffSum = 0;
     for (size_t i = 0; i < fb->len; i += MOTION_SKIP_BYTES) {
       diffSum += abs((int)fb->buf[i] - (int)lastFrameBuf[i]);
       if (diffSum > MOTION_THRESHOLD) {
@@ -176,7 +153,7 @@ bool detectMotion() {
       }
     }
   } else {
-    motionDetected = true;  // erstes Bild → keine Referenz
+    motionDetected = true; // Erstes Bild = Bewegung
   }
 
   if (lastFrameBuf) free(lastFrameBuf);
@@ -188,6 +165,7 @@ bool detectMotion() {
 
   esp_camera_fb_return(fb);
   delay(200);
+
   return motionDetected;
 }
 
@@ -196,76 +174,113 @@ void sendPhotoToTelegram(const String& fileName) {
   client.setCACert(telegram_cert);
 
   if (!client.connect("api.telegram.org", 443)) {
-    Serial.print(getTimeStamp());
-    Serial.println("❌ Verbindung zu Telegram API fehlgeschlagen");
+    Serial.println("❌ Verbindung zu Telegram fehlgeschlagen");
     return;
   }
 
   File photo = SPIFFS.open(fileName, "r");
   if (!photo) {
-    Serial.print(getTimeStamp());
-    Serial.println("❌ Foto-Datei nicht gefunden");
+    Serial.println("❌ Foto konnte nicht geöffnet werden");
     return;
   }
 
-  // Hier Telegram API-Upload-Code einfügen (für brevity nicht gezeigt)
-  Serial.print(getTimeStamp());
-  Serial.println("✅ Foto an Telegram gesendet");
+  String boundary = "----WebKitFormBoundary7MA4YWxkTrZu0gW";
+  String url = "/bot" + String(TELEGRAM_BOT_TOKEN) + "/sendPhoto?chat_id=" + String(TELEGRAM_CHAT_ID);
+
+  String bodyStart = "--" + boundary + "\r\n"
+                     "Content-Disposition: form-data; name=\"photo\"; filename=\"" + fileName + "\"\r\n"
+                     "Content-Type: image/jpeg\r\n\r\n";
+
+  String bodyEnd = "\r\n--" + boundary + "--\r\n";
+
+  int contentLength = bodyStart.length() + photo.size() + bodyEnd.length();
+
+  client.printf("POST %s HTTP/1.1\r\n", url.c_str());
+  client.printf("Host: api.telegram.org\r\n");
+  client.printf("User-Agent: ESP32-Cam\r\n");
+  client.printf("Connection: close\r\n");
+  client.printf("Content-Type: multipart/form-data; boundary=%s\r\n", boundary.c_str());
+  client.printf("Content-Length: %d\r\n\r\n", contentLength);
+
+  client.print(bodyStart);
+
+  uint8_t buf[512];
+  size_t len;
+  while ((len = photo.read(buf, sizeof(buf))) > 0) {
+    client.write(buf, len);
+  }
   photo.close();
+
+  client.print(bodyEnd);
+
+  while (client.connected() || client.available()) {
+    String line = client.readStringUntil('\n');
+    if (line == "\r") break;
+  }
+
+  String response;
+  while (client.available()) {
+    response += client.readString();
+  }
+
+  Serial.println("✅ Foto an Telegram gesendet");
 }
 
 void setup() {
   Serial.begin(115200);
   delay(1000);
-
-  Serial.print(getTimeStamp());
-  Serial.println("Starte...");
+  Serial.println("Start...");
 
   if (!SPIFFS.begin(true)) {
-    Serial.print(getTimeStamp());
-    Serial.println("❌ SPIFFS konnte nicht gemountet werden");
+    Serial.println("❌ SPIFFS Mount fehlgeschlagen");
+    return;
   }
 
   connectWiFi();
 
-  configTime(3 * 3600, 0, "pool.ntp.org", "time.nist.gov");  // Zeitzone +3 Stunden (z.B. MESZ)
+  if (WiFi.status() == WL_CONNECTED) {
+    configTime(0, 0, "de.pool.ntp.org");
+    Serial.print("Warte auf Zeit-Sync");
+    time_t now = time(nullptr);
+    int retries = 0;
+    while (now < 8 * 3600 * 2 && retries < 20) {
+      delay(500);
+      Serial.print(".");
+      now = time(nullptr);
+      retries++;
+    }
+    Serial.println();
 
-  Serial.print(getTimeStamp());
-  Serial.println("Warte auf Zeit-Sync....");
-  while (time(nullptr) < 100000) {  // warten auf NTP
-    delay(100);
-    Serial.print(getTimeStamp());
-    Serial.print(".");
+    if (now < 8 * 3600 * 2) {
+      Serial.println("❌ Zeit konnte nicht synchronisiert werden");
+    } else {
+      Serial.println("✅ Zeit synchronisiert");
+    }
+  } else {
+    Serial.println("⚠️ Kein WLAN, keine Zeit-Synchronisation");
   }
 
-  Serial.print(getTimeStamp());
-  Serial.println("✅ Zeit synchronisiert");
-
-  if (!initCamera(PIXFORMAT_JPEG)) {
-    Serial.print(getTimeStamp());
-    Serial.println("❌ Kamera konnte nicht initialisiert werden");
-    while (true) delay(1000);
+  if (!initCamera(PIXFORMAT_GRAYSCALE)) {
+    Serial.println("❌ Kamera Init fehlgeschlagen");
+    return;
   }
 }
 
 void loop() {
   if (detectMotion()) {
     delay(2000);
-    Serial.print(getTimeStamp());
     Serial.println("Bewegung erkannt!");
 
-    // Foto machen und speichern
     camera_fb_t* fb = esp_camera_fb_get();
     if (!fb) {
-      Serial.print(getTimeStamp());
-      Serial.println("❌ Kamera konnte kein Foto machen");
+      Serial.println("Fehler beim Aufnehmen des Bildes");
       return;
     }
 
-    File file = SPIFFS.open("/photo.jpg", FILE_WRITE);
+    String filename = "/photo.jpg";
+    File file = SPIFFS.open(filename, FILE_WRITE);
     if (!file) {
-      Serial.print(getTimeStamp());
-      Serial.println("❌ Foto konnte nicht gespeichert werden");
+      Serial.println("Konnte Datei nicht öffnen");
       esp_camera_fb_return(fb);
       return;
     }
@@ -274,7 +289,8 @@ void loop() {
     file.close();
     esp_camera_fb_return(fb);
 
-    sendPhotoToTelegram("/photo.jpg");
+    sendPhotoToTelegram(filename);
   }
-  delay(1000);
+
+  delay(1000); // 1 Sekunde warten
 }
