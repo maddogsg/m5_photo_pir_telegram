@@ -1,13 +1,12 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
-#include <HTTPClient.h>
 #include <FS.h>
 #include <SPIFFS.h>
 #include "esp_camera.h"
 #include "secrets.h"
 
-// ✅ PIN-Konfiguration für M5Stack TimerCAM X (mit OV3660)
+// PIN-Konfiguration TimerCAM
 #define PWDN_GPIO_NUM    -1
 #define RESET_GPIO_NUM   15
 #define XCLK_GPIO_NUM    27
@@ -25,7 +24,6 @@
 #define HREF_GPIO_NUM    26
 #define PCLK_GPIO_NUM    21
 
-// Telegram CA Root Zertifikat (PEM Format)
 const char* telegram_cert = \
 "-----BEGIN CERTIFICATE-----\n"
 "MIIFFjCCAv6gAwIBAgIRAJErCErPDBinU/bWLiWnX1owDQYJKoZIhvcNAQELBQAw\n"
@@ -96,8 +94,8 @@ bool initCamera() {
   config.pin_pclk     = PCLK_GPIO_NUM;
   config.pin_vsync    = VSYNC_GPIO_NUM;
   config.pin_href     = HREF_GPIO_NUM;
-  config.pin_sccb_sda = SIOD_GPIO_NUM;  // Änderung von pin_sscb_sda auf pin_sccb_sda
-  config.pin_sccb_scl = SIOC_GPIO_NUM;  // Änderung von pin_sscb_scl auf pin_sccb_scl
+  config.pin_sccb_sda = SIOD_GPIO_NUM;
+  config.pin_sccb_scl = SIOC_GPIO_NUM;
   config.pin_pwdn     = PWDN_GPIO_NUM;
   config.pin_reset    = RESET_GPIO_NUM;
   config.xclk_freq_hz = 20000000;
@@ -136,24 +134,19 @@ void sendPhotoToTelegram(const String& fileName) {
   WiFiClientSecure client;
   client.setCACert(telegram_cert);
 
-  HTTPClient https;
-  String url = "https://api.telegram.org/bot" + String(TELEGRAM_BOT_TOKEN) + "/sendPhoto?chat_id=" + String(TELEGRAM_CHAT_ID);
-
-  Serial.println("📤 Sende Foto an Telegram ...");
-  https.begin(client, url);
-
-  // Datei öffnen
-  File photo = SPIFFS.open(fileName, "r");
-  if (!photo) {
-    Serial.println("❌ Foto konnte nicht geöffnet werden.");
-    https.end();
+  if (!client.connect("api.telegram.org", 443)) {
+    Serial.println("❌ Verbindung zu Telegram API fehlgeschlagen");
     return;
   }
 
-  // Multipart Boundary
-  String boundary = "----WebKitFormBoundary7MA4YWxkTrZu0gW";
+  File photo = SPIFFS.open(fileName, "r");
+  if (!photo) {
+    Serial.println("❌ Foto konnte nicht geöffnet werden.");
+    return;
+  }
 
-  https.addHeader("Content-Type", "multipart/form-data; boundary=" + boundary);
+  String boundary = "----WebKitFormBoundary7MA4YWxkTrZu0gW";
+  String url = "/bot" + String(TELEGRAM_BOT_TOKEN) + "/sendPhoto?chat_id=" + String(TELEGRAM_CHAT_ID);
 
   String bodyStart = "--" + boundary + "\r\n"
                      "Content-Disposition: form-data; name=\"photo\"; filename=\"" + fileName + "\"\r\n"
@@ -163,38 +156,41 @@ void sendPhotoToTelegram(const String& fileName) {
 
   int contentLength = bodyStart.length() + photo.size() + bodyEnd.length();
 
-  https.addHeader("Content-Length", String(contentLength));
+  // HTTP Header manuell senden
+  client.printf("POST %s HTTP/1.1\r\n", url.c_str());
+  client.printf("Host: api.telegram.org\r\n");
+  client.printf("User-Agent: ESP32-Camera\r\n");
+  client.printf("Connection: close\r\n");
+  client.printf("Content-Type: multipart/form-data; boundary=%s\r\n", boundary.c_str());
+  client.printf("Content-Length: %d\r\n\r\n", contentLength);
 
-  https.sendRequest("POST", NULL, 0); // Hier nur den POST senden, danach kommt der Body
-  // Der obige Aufruf ist der Fehler, korrigiert wie folgt:
+  // Body Start senden
+  client.print(bodyStart);
 
-  // Um den Fehler zu beheben, rufe sendRequest mit (uint8_t*)nullptr statt nullptr auf:
-  // int httpCode = https.sendRequest("POST", (uint8_t*)nullptr, 0);
-  // Korrektur:
+  // Bilddaten senden
+  uint8_t buf[512];
+  size_t len;
+  while ((len = photo.read(buf, sizeof(buf))) > 0) {
+    client.write(buf, len);
+  }
+  photo.close();
 
-  int httpCode = https.sendRequest("POST", (uint8_t*)nullptr, 0);
+  // Body Ende senden
+  client.print(bodyEnd);
 
-  if (httpCode > 0) {
-    // Body senden
-    https.write((const uint8_t*)bodyStart.c_str(), bodyStart.length());
-
-    uint8_t buf[512];
-    size_t len;
-    while ((len = photo.read(buf, sizeof(buf))) > 0) {
-      https.write(buf, len);
-    }
-
-    https.write((const uint8_t*)bodyEnd.c_str(), bodyEnd.length());
-
-    String response = https.getString();
-    Serial.println("✅ Foto an Telegram gesendet.");
-    Serial.println(response);
-  } else {
-    Serial.printf("❌ Fehler beim Senden: %d\n", httpCode);
+  // Antwort lesen
+  while (client.connected() || client.available()) {
+    String line = client.readStringUntil('\n');
+    if (line == "\r") break;  // Header-Ende
   }
 
-  photo.close();
-  https.end();
+  String response;
+  while (client.available()) {
+    response += client.readString();
+  }
+
+  Serial.println("✅ Foto an Telegram gesendet:");
+  Serial.println(response);
 }
 
 void setup() {
@@ -214,7 +210,7 @@ void setup() {
     return;
   }
 
-  // Beispiel: Foto aufnehmen und speichern
+  // Foto aufnehmen
   camera_fb_t* fb = esp_camera_fb_get();
   if (!fb) {
     Serial.println("❌ Kamera Frame konnte nicht geholt werden.");
