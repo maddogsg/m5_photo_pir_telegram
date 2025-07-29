@@ -60,6 +60,8 @@ const char* telegram_cert = \
 uint8_t* lastFrameBuf = nullptr;
 size_t lastFrameLen = 0;
 
+unsigned long startTime = 0; // neu: Startzeit merken
+
 void connectWiFi() {
   Serial.print("🔌 Verbinde mit WLAN: ");
   Serial.println(WIFI_SSID);
@@ -164,7 +166,7 @@ bool detectMotion() {
   }
 
   esp_camera_fb_return(fb);
-  delay(200); 
+  delay(200);
   return motionDetected;
 }
 
@@ -253,16 +255,24 @@ void setup() {
     Serial.println("❌ Kamera-Init (Graustufen) fehlgeschlagen.");
     return;
   }
+
+  startTime = millis(); // neu: Startzeit merken nach WLAN & NTP & Kamera
 }
 
 void loop() {
   delay(3000);
 
+  // neu: in den ersten 10 Sekunden keine Fotos und kein Telegram
+  if (millis() - startTime < 10000) {
+    Serial.println("⏳ Warte 10 Sekunden nach Start...");
+    return;
+  }
+
   if (detectMotion()) {
     Serial.println("⚠️ Bewegung erkannt!");
 
     esp_camera_deinit();
-    delay(300); 
+    delay(300);
     if (!initCamera(PIXFORMAT_JPEG)) {
       Serial.println("❌ Kamera Init (JPEG) fehlgeschlagen.");
       return;
@@ -277,24 +287,23 @@ void loop() {
     String photoFile = "/photo.jpg";
     File file = SPIFFS.open(photoFile, FILE_WRITE);
     if (!file) {
-      Serial.println("❌ Datei konnte nicht geöffnet werden.");
+      Serial.println("❌ Kann Foto nicht speichern.");
       esp_camera_fb_return(fb);
-      delay(200); 
       return;
     }
-
     file.write(fb->buf, fb->len);
     file.close();
     esp_camera_fb_return(fb);
-    delay(200); 
 
-    Serial.println("📸 Foto gespeichert: " + photoFile);
     sendPhotoToTelegram(photoFile);
 
     esp_camera_deinit();
     delay(300);
-    initCamera(PIXFORMAT_GRAYSCALE);  // zurück zu Bewegungsmodus
+    if (!initCamera(PIXFORMAT_GRAYSCALE)) {
+      Serial.println("❌ Kamera Init (Graustufen) fehlgeschlagen.");
+      return;
+    }
   } else {
-    Serial.println("✅ Keine Bewegung.");
+    Serial.println("⏳ Keine Bewegung erkannt.");
   }
 }
