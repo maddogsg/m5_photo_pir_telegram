@@ -5,6 +5,7 @@
 #include <SPIFFS.h>
 #include "esp_camera.h"
 #include "secrets.h"
+#include <time.h>  // Für NTP Zeit-Synchronisation
 
 #define MOTION_THRESHOLD 500000
 #define MOTION_SKIP_BYTES 10
@@ -229,6 +230,17 @@ void setup() {
   Serial.begin(115200);
   delay(1000);
   Serial.println("🚀 Starte...");
+
+  // NTP Zeit synchronisieren
+  configTime(0, 0, "pool.ntp.org", "time.nist.gov");
+  Serial.print("⏳ Warte auf Zeit-Synchronisation");
+  time_t now = time(nullptr);
+  while (now < 8 * 3600 * 2) { // Warte bis Zeit gesetzt (ca. 16. Januar 1970)
+    delay(500);
+    Serial.print(".");
+    now = time(nullptr);
+  }
+  Serial.println("\n✅ Zeit synchronisiert.");
 
   if (!SPIFFS.begin(true)) {
     Serial.println("❌ SPIFFS Mount fehlgeschlagen!");
