@@ -105,7 +105,7 @@ bool initCamera(pixformat_t format) {
   config.pixel_format = format;
 
   if (psramFound()) {
-    config.frame_size = FRAMESIZE_SVGA;
+    config.frame_size = FRAMESIZE_VGA;
     config.jpeg_quality = 10;
     config.fb_count = 2;
     Serial.println("💾 PSRAM gefunden: SVGA, Qualität 10, 2 Framebuffer");
@@ -163,7 +163,7 @@ bool detectMotion() {
   }
 
   esp_camera_fb_return(fb);
-  delay(100); 
+  delay(200); 
   return motionDetected;
 }
 
@@ -250,7 +250,7 @@ void loop() {
     Serial.println("⚠️ Bewegung erkannt!");
 
     esp_camera_deinit();
-    delay(200); 
+    delay(300); 
     if (!initCamera(PIXFORMAT_JPEG)) {
       Serial.println("❌ Kamera Init (JPEG) fehlgeschlagen.");
       return;
@@ -267,20 +267,20 @@ void loop() {
     if (!file) {
       Serial.println("❌ Datei konnte nicht geöffnet werden.");
       esp_camera_fb_return(fb);
-      delay(100); 
+      delay(200); 
       return;
     }
 
     file.write(fb->buf, fb->len);
     file.close();
     esp_camera_fb_return(fb);
-    delay(100); 
+    delay(200); 
 
     Serial.println("📸 Foto gespeichert: " + photoFile);
     sendPhotoToTelegram(photoFile);
 
     esp_camera_deinit();
-    delay(200);
+    delay(300);
     initCamera(PIXFORMAT_GRAYSCALE);  // zurück zu Bewegungsmodus
   } else {
     Serial.println("✅ Keine Bewegung.");
