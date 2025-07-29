@@ -200,7 +200,7 @@ bool isMotionDetected(const uint8_t* currentBuf, size_t currentLen) {
 
   // Differenz berechnen (Summe der absoluten Differenzen der Bytes)
   unsigned long diffSum = 0;
-  for (size_t i = 0; i < currentLen; i += 10) { // Schrittweite 10 für Performance
+  for (size_t i = 0; i < currentLen; i += 50) { // Schrittweite 10 für Performance
     diffSum += abs((int)currentBuf[i] - (int)lastFrameBuf[i]);
     if (diffSum > MOTION_THRESHOLD) {
       return true;  // Bewegung erkannt
