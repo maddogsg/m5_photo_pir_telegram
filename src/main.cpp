@@ -6,7 +6,7 @@
 #include "esp_camera.h"
 #include "secrets.h"
 
-#define MOTION_THRESHOLD 150000
+#define MOTION_THRESHOLD 800000
 #define MOTION_SKIP_BYTES 50
 
 #define PWDN_GPIO_NUM    -1
