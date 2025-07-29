@@ -54,6 +54,12 @@ const char* telegram_cert = \
 "LXY2JtwE65/3YR8V3Idv7kaWKK2hJn0KCacuBKONvPi8BDAB\n"
 "-----END CERTIFICATE-----\n";
 
+// Bewegungserkennung Schwellenwert
+#define MOTION_THRESHOLD 10000
+
+uint8_t* lastFrameBuf = nullptr;
+size_t lastFrameLen = 0;
+
 void connectWiFi() {
   Serial.print("🔌 Verbinde mit WLAN: ");
   Serial.println(WIFI_SSID);
@@ -186,6 +192,34 @@ void sendPhotoToTelegram(const String& fileName) {
   Serial.println(response);
 }
 
+bool isMotionDetected(const uint8_t* currentBuf, size_t currentLen) {
+  if (lastFrameBuf == nullptr || lastFrameLen != currentLen) {
+    // Kein Referenzbild oder andere Größe → Bewegung annehmen
+    return true;
+  }
+
+  // Differenz berechnen (Summe der absoluten Differenzen der Bytes)
+  unsigned long diffSum = 0;
+  for (size_t i = 0; i < currentLen; i += 10) { // Schrittweite 10 für Performance
+    diffSum += abs((int)currentBuf[i] - (int)lastFrameBuf[i]);
+    if (diffSum > MOTION_THRESHOLD) {
+      return true;  // Bewegung erkannt
+    }
+  }
+  return false;  // keine Bewegung
+}
+
+void saveCurrentFrameAsLast(const uint8_t* buf, size_t len) {
+  if (lastFrameBuf != nullptr) {
+    free(lastFrameBuf);
+  }
+  lastFrameBuf = (uint8_t*)malloc(len);
+  if (lastFrameBuf != nullptr) {
+    memcpy(lastFrameBuf, buf, len);
+    lastFrameLen = len;
+  }
+}
+
 void setup() {
   Serial.begin(115200);
   delay(1000);
@@ -205,7 +239,7 @@ void setup() {
 }
 
 void loop() {
-  delay(3000);  // ⏱️ 3 Sekunden warten
+  delay(3000);  // alle 3 Sekunden prüfen
 
   Serial.println("📷 Neue Aufnahme ...");
   camera_fb_t* fb = esp_camera_fb_get();
@@ -214,19 +248,26 @@ void loop() {
     return;
   }
 
-  String photoFile = "/photo.jpg";
-  File file = SPIFFS.open(photoFile, FILE_WRITE);
-  if (!file) {
-    Serial.println("❌ Datei konnte nicht zum Schreiben geöffnet werden.");
-    esp_camera_fb_return(fb);
-    return;
+  if (isMotionDetected(fb->buf, fb->len)) {
+    Serial.println("⚠️ Bewegung erkannt, sende Foto...");
+
+    String photoFile = "/photo.jpg";
+    File file = SPIFFS.open(photoFile, FILE_WRITE);
+    if (!file) {
+      Serial.println("❌ Datei konnte nicht zum Schreiben geöffnet werden.");
+      esp_camera_fb_return(fb);
+      return;
+    }
+
+    file.write(fb->buf, fb->len);
+    file.close();
+
+    sendPhotoToTelegram(photoFile);
+
+    saveCurrentFrameAsLast(fb->buf, fb->len);
+  } else {
+    Serial.println("ℹ️ Keine Bewegung erkannt, kein Foto gesendet.");
   }
 
-  file.write(fb->buf, fb->len);
-  file.close();
   esp_camera_fb_return(fb);
-
-  Serial.println("📸 Foto gespeichert: " + photoFile);
-
-  sendPhotoToTelegram(photoFile);
 }
