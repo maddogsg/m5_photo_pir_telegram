@@ -55,7 +55,7 @@ const char* telegram_cert = \
 "-----END CERTIFICATE-----\n";
 
 // Bewegungserkennung Schwellenwert
-#define MOTION_THRESHOLD 10000
+#define MOTION_THRESHOLD 100000 
 
 uint8_t* lastFrameBuf = nullptr;
 size_t lastFrameLen = 0;
