@@ -60,7 +60,7 @@ const char* telegram_cert = \
 uint8_t* lastFrameBuf = nullptr;
 size_t lastFrameLen = 0;
 
-unsigned long startTime = 0; // neu: Startzeit merken
+unsigned long startTime = 0; // Startzeit merken
 
 void connectWiFi() {
   Serial.print("🔌 Verbinde mit WLAN: ");
@@ -127,26 +127,24 @@ bool initCamera(pixformat_t format) {
 
   sensor_t* s = esp_camera_sensor_get();
   if (s && s->id.PID == OV3660_PID) {
-    s->set_vflip(s, 1);
-    s->set_brightness(s, 1);
-    s->set_saturation(s, -2);
+    s->set_vflip(s, 1); // OV3660 Sensor: Bild drehen
   }
 
-  Serial.println("✅ Kamera initialisiert.");
+  Serial.println("✅ Kamera initialisiert");
   return true;
 }
 
 bool detectMotion() {
   camera_fb_t* fb = esp_camera_fb_get();
   if (!fb || !fb->buf) {
-    Serial.println("❌ Kein Frame für Bewegungserkennung.");
+    Serial.println("⚠️ Kein Bild verfügbar");
     return false;
   }
 
   bool motionDetected = false;
 
   if (lastFrameBuf && lastFrameLen == fb->len) {
-    size_t diffSum = 0;
+    unsigned long diffSum = 0;
     for (size_t i = 0; i < fb->len; i += MOTION_SKIP_BYTES) {
       diffSum += abs((int)fb->buf[i] - (int)lastFrameBuf[i]);
       if (diffSum > MOTION_THRESHOLD) {
@@ -155,7 +153,7 @@ bool detectMotion() {
       }
     }
   } else {
-    motionDetected = true;  // erstes Bild → keine Referenz
+    motionDetected = true; // Erstes Bild = Bewegung
   }
 
   if (lastFrameBuf) free(lastFrameBuf);
@@ -167,6 +165,7 @@ bool detectMotion() {
 
   esp_camera_fb_return(fb);
   delay(200);
+
   return motionDetected;
 }
 
@@ -175,13 +174,13 @@ void sendPhotoToTelegram(const String& fileName) {
   client.setCACert(telegram_cert);
 
   if (!client.connect("api.telegram.org", 443)) {
-    Serial.println("❌ Verbindung zu Telegram API fehlgeschlagen");
+    Serial.println("❌ Verbindung zu Telegram fehlgeschlagen");
     return;
   }
 
   File photo = SPIFFS.open(fileName, "r");
   if (!photo) {
-    Serial.println("❌ Foto konnte nicht geöffnet werden.");
+    Serial.println("❌ Foto konnte nicht geöffnet werden");
     return;
   }
 
@@ -198,7 +197,7 @@ void sendPhotoToTelegram(const String& fileName) {
 
   client.printf("POST %s HTTP/1.1\r\n", url.c_str());
   client.printf("Host: api.telegram.org\r\n");
-  client.printf("User-Agent: ESP32-Camera\r\n");
+  client.printf("User-Agent: ESP32-Cam\r\n");
   client.printf("Connection: close\r\n");
   client.printf("Content-Type: multipart/form-data; boundary=%s\r\n", boundary.c_str());
   client.printf("Content-Length: %d\r\n\r\n", contentLength);
@@ -224,99 +223,73 @@ void sendPhotoToTelegram(const String& fileName) {
     response += client.readString();
   }
 
-  Serial.println("✅ Foto an Telegram gesendet:");
-  // Serial.println(response);
+  Serial.println("✅ Foto an Telegram gesendet");
 }
 
 void setup() {
   Serial.begin(115200);
   delay(1000);
-  Serial.println("🚀 Starte...");
-
-  // NTP Zeit synchronisieren
-  if (WiFi.status() == WL_CONNECTED) {
-    configTime(0, 0, "de.pool.ntp.org");
-  } else {
-    Serial.println("❌ Kein WLAN – Zeit kann nicht synchronisiert werden!");
-  }
-
-  Serial.print("⏳ Warte auf Zeit-Synchronisation");
-  time_t now = time(nullptr);
-  int retries = 0;
-  while (now < 8 * 3600 * 2 && retries < 20) {
-    delay(500);
-    Serial.print(".");
-    now = time(nullptr);
-    retries++;
-  }
-  Serial.println();
-
-  if (now < 8 * 3600 * 2) {
-    Serial.println("❌ Zeit konnte nicht synchronisiert werden.");
-  } else {
-    Serial.println("✅ Zeit synchronisiert.");
-  }
+  Serial.println("Start...");
 
   if (!SPIFFS.begin(true)) {
-    Serial.println("❌ SPIFFS Mount fehlgeschlagen!");
+    Serial.println("❌ SPIFFS Mount fehlgeschlagen");
     return;
   }
 
   connectWiFi();
 
-  if (!initCamera(PIXFORMAT_GRAYSCALE)) {
-    Serial.println("❌ Kamera-Init (Graustufen) fehlgeschlagen.");
-    return;
+  if (WiFi.status() == WL_CONNECTED) {
+    configTime(0, 0, "de.pool.ntp.org");
+    Serial.print("Warte auf Zeit-Sync");
+    time_t now = time(nullptr);
+    int retries = 0;
+    while (now < 8 * 3600 * 2 && retries < 20) {
+      delay(500);
+      Serial.print(".");
+      now = time(nullptr);
+      retries++;
+    }
+    Serial.println();
+
+    if (now < 8 * 3600 * 2) {
+      Serial.println("❌ Zeit konnte nicht synchronisiert werden");
+    } else {
+      Serial.println("✅ Zeit synchronisiert");
+    }
+  } else {
+    Serial.println("⚠️ Kein WLAN, keine Zeit-Synchronisation");
   }
 
-  startTime = millis(); // neu: Startzeit merken nach WLAN & NTP & Kamera
+  if (!initCamera(PIXFORMAT_GRAYSCALE)) {
+    Serial.println("❌ Kamera Init fehlgeschlagen");
+    return;
+  }
 }
 
 void loop() {
-  delay(3000);
-
-  // neu: in den ersten 10 Sekunden keine Fotos und kein Telegram
-  if (millis() - startTime < 10000) {
-    Serial.println("⏳ Warte 10 Sekunden nach Start...");
-    return;
-  }
-
   if (detectMotion()) {
-    Serial.println("⚠️ Bewegung erkannt!");
-
-    esp_camera_deinit();
-    delay(300);
-    if (!initCamera(PIXFORMAT_JPEG)) {
-      Serial.println("❌ Kamera Init (JPEG) fehlgeschlagen.");
-      return;
-    }
+    Serial.println("Bewegung erkannt!");
 
     camera_fb_t* fb = esp_camera_fb_get();
     if (!fb) {
-      Serial.println("❌ Kamera Frame fehlgeschlagen.");
+      Serial.println("Fehler beim Aufnehmen des Bildes");
       return;
     }
 
-    String photoFile = "/photo.jpg";
-    File file = SPIFFS.open(photoFile, FILE_WRITE);
+    String filename = "/photo.jpg";
+    File file = SPIFFS.open(filename, FILE_WRITE);
     if (!file) {
-      Serial.println("❌ Kann Foto nicht speichern.");
+      Serial.println("Konnte Datei nicht öffnen");
       esp_camera_fb_return(fb);
       return;
     }
+
     file.write(fb->buf, fb->len);
     file.close();
     esp_camera_fb_return(fb);
 
-    sendPhotoToTelegram(photoFile);
-
-    esp_camera_deinit();
-    delay(300);
-    if (!initCamera(PIXFORMAT_GRAYSCALE)) {
-      Serial.println("❌ Kamera Init (Graustufen) fehlgeschlagen.");
-      return;
-    }
-  } else {
-    Serial.println("⏳ Keine Bewegung erkannt.");
+    sendPhotoToTelegram(filename);
   }
+
+  delay(1000); // 1 Sekunde warten
 }
