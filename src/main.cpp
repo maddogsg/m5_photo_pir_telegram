@@ -154,7 +154,6 @@ void sendPhotoToTelegram(const String& fileName) {
 
   int contentLength = bodyStart.length() + photo.size() + bodyEnd.length();
 
-  // HTTP Header manuell senden
   client.printf("POST %s HTTP/1.1\r\n", url.c_str());
   client.printf("Host: api.telegram.org\r\n");
   client.printf("User-Agent: ESP32-Camera\r\n");
@@ -162,10 +161,8 @@ void sendPhotoToTelegram(const String& fileName) {
   client.printf("Content-Type: multipart/form-data; boundary=%s\r\n", boundary.c_str());
   client.printf("Content-Length: %d\r\n\r\n", contentLength);
 
-  // Body Start senden
   client.print(bodyStart);
 
-  // Bilddaten senden
   uint8_t buf[512];
   size_t len;
   while ((len = photo.read(buf, sizeof(buf))) > 0) {
@@ -173,13 +170,11 @@ void sendPhotoToTelegram(const String& fileName) {
   }
   photo.close();
 
-  // Body Ende senden
   client.print(bodyEnd);
 
-  // Antwort lesen
   while (client.connected() || client.available()) {
     String line = client.readStringUntil('\n');
-    if (line == "\r") break;  // Header-Ende
+    if (line == "\r") break;
   }
 
   String response;
@@ -207,8 +202,12 @@ void setup() {
     Serial.println("❌ Kamera-Init fehlgeschlagen.");
     return;
   }
+}
 
-  // Foto aufnehmen
+void loop() {
+  delay(3000);  // ⏱️ 3 Sekunden warten
+
+  Serial.println("📷 Neue Aufnahme ...");
   camera_fb_t* fb = esp_camera_fb_get();
   if (!fb) {
     Serial.println("❌ Kamera Frame konnte nicht geholt werden.");
@@ -230,8 +229,4 @@ void setup() {
   Serial.println("📸 Foto gespeichert: " + photoFile);
 
   sendPhotoToTelegram(photoFile);
-}
-
-void loop() {
-  // Nichts zu tun
 }
