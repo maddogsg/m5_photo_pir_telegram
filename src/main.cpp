@@ -203,7 +203,9 @@ void sendPhotoToTelegram(const String& filepath) {
 
   WiFiClient *stream = https.getStreamPtr();
 
+  // Hier wurde nur diese Zeile geändert, alles andere unverändert:
   int httpCode = https.sendRequest("POST", nullptr, 0);
+
   if (httpCode > 0) {
     stream->print(bodyStart);
     stream->write(fb->buf, fb->len);
