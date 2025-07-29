@@ -234,15 +234,28 @@ void setup() {
   Serial.println("🚀 Starte...");
 
   // NTP Zeit synchronisieren
-  configTime(0, 0, "pool.ntp.org", "time.nist.gov");
+  if (WiFi.status() == WL_CONNECTED) {
+    configTime(0, 0, "de.pool.ntp.org");
+  } else {
+    Serial.println("❌ Kein WLAN – Zeit kann nicht synchronisiert werden!");
+  }
+
   Serial.print("⏳ Warte auf Zeit-Synchronisation");
   time_t now = time(nullptr);
-  while (now < 8 * 3600 * 2) { // Warte bis Zeit gesetzt (ca. 16. Januar 1970)
+  int retries = 0;
+  while (now < 8 * 3600 * 2 && retries < 20) {
     delay(500);
     Serial.print(".");
     now = time(nullptr);
+    retries++;
   }
-  Serial.println("\n✅ Zeit synchronisiert.");
+  Serial.println();
+
+  if (now < 8 * 3600 * 2) {
+    Serial.println("❌ Zeit konnte nicht synchronisiert werden.");
+  } else {
+    Serial.println("✅ Zeit synchronisiert.");
+  }
 
   if (!SPIFFS.begin(true)) {
     Serial.println("❌ SPIFFS Mount fehlgeschlagen!");
