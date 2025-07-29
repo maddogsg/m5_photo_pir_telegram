@@ -5,7 +5,7 @@
 #include <HTTPClient.h>
 #include <FS.h>
 #include <SPIFFS.h>
-#include "exclude/secrets.h"
+#include "secrets.h"
 
 // --- Pin-Definitionen M5Stack TimerCAM (OV3660) ---
 #define PWDN_GPIO_NUM    -1
