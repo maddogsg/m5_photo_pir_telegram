@@ -268,6 +268,7 @@ void setup() {
 
 void loop() {
   if (detectMotion()) {
+    delay(2000);
     Serial.println("Bewegung erkannt!");
 
     camera_fb_t* fb = esp_camera_fb_get();
