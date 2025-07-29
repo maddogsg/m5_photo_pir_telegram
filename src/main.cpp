@@ -250,6 +250,7 @@ void setup() {
 
 void loop() {
   if (detectMotion()) {
+    delay(2000);
     Serial.print(getTimeStamp());
     Serial.println("Bewegung erkannt!");
 
@@ -275,5 +276,5 @@ void loop() {
 
     sendPhotoToTelegram("/photo.jpg");
   }
-  delay(500);
+  delay(1000);
 }
